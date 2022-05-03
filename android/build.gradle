@@ -19,15 +19,15 @@ buildscript {
 
 apply plugin: 'com.android.library'
 
+def safeExtGet(prop, fallback) {
+    rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}
+
 android {
-    compileSdkVersion 28
-    buildToolsVersion "28.0.3"
+    compileSdkVersion safeExtGet("compileSdkVersion", 30)
 
     defaultConfig {
-        minSdkVersion 16
-        targetSdkVersion 24
-        versionCode 1
-        versionName "1.0"
+        minSdkVersion safeExtGet("minSdkVersion", 21)
     }
     lintOptions {
         abortOnError false
@@ -53,7 +53,7 @@ repositories {
 }
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    compile fileTree(dir: 'libs', include: ['*.jar'])
     implementation 'com.facebook.react:react-native:+'  // From node_modules
     implementation group: 'com.android.support', name: 'support-v4', version: '27.0.0'
     implementation "com.google.zxing:core:3.3.0"
