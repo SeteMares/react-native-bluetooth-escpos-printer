@@ -19,7 +19,7 @@ NSString *EVENT_UNABLE_CONNECT=@"EVENT_UNABLE_CONNECT";
 NSString *EVENT_CONNECTED=@"EVENT_CONNECTED";
 static NSArray<CBUUID *> *supportServices = nil;
 static NSDictionary *writeableCharactiscs = nil;
-bool hasListeners;
+static bool hasListeners;
 static CBPeripheral *connected;
 static RNBluetoothManager *instance;
 static NSObject<WriteDataToBleDelegate> *writeDataDelegate;// delegate of write data resule;
