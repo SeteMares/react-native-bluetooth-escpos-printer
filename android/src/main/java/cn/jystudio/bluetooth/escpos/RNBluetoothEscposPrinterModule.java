@@ -17,6 +17,8 @@ import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.QRCodeWriter;
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 
+import com.google.zxing.pdf417.PDF417Writer;
+
 import javax.annotation.Nullable;
 import java.nio.charset.Charset;
 import java.util.*;
@@ -428,6 +430,44 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
     }
 
     @ReactMethod
+    public void printPDF417(String content, int size, final Promise promise) {
+        try {
+            Log.i(TAG, "content：" + content);
+            Log.i(TAG, "size：" + size);
+            PDF417Writer barcodeWriter = new PDF417Writer();
+            BitMatrix bitMatrix = barcodeWriter.encode(content, BarcodeFormat.PDF_417, 700, 700);
+
+            int width = bitMatrix.getWidth();
+            int height = bitMatrix.getHeight();
+
+            Log.i(TAG, "w:" + width + "h:" + height);
+
+            int[] pixels = new int[width * height];
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    if (bitMatrix.get(x, y)) {
+                        pixels[y * width + x] = 0xff000000;
+                    } else {
+                        pixels[y * width + x] = 0xffffffff;
+                    }
+                }
+            }
+
+            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            bitmap.setPixels(pixels, 0, width, 0, 0, width, height);
+
+            byte[] data = PrintPicture.POS_PrintBMP(bitmap, size, 0, 0);
+            if (sendDataByte(data)) {
+                promise.resolve(null);
+            } else {
+                promise.reject("COMMAND_NOT_SEND");
+            }
+        } catch (Exception e) {
+            promise.reject(e.getMessage(), e);
+        }
+    }
+
+    @ReactMethod
     public void printBarCode(String str, int nType, int nWidthX, int nHeight,
                              int nHriFontType, int nHriFontPosition) {
         byte[] command = PrinterCommand.getBarCodeCommand(str, nType, nWidthX, nHeight, nHriFontType, nHriFontPosition);
@@ -455,7 +495,7 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
          }catch (Exception e){
             Log.d(TAG, e.getMessage());
         }
-    }    
+    }
 
     private boolean sendDataByte(byte[] data) {
         if (data==null || mService.getState() != BluetoothService.STATE_CONNECTED) {
