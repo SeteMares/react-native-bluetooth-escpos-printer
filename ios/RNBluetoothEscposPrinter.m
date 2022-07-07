@@ -481,7 +481,7 @@ RCT_EXPORT_METHOD(printPic:(NSString *) base64encodeStr withOptions:(NSDictionar
             //TODO:need to handel param "left" in the options.
             NSInteger paddingLeft = [[options valueForKey:@"left"] integerValue];
             if(!paddingLeft) paddingLeft = 0;
-            NSData *decoded = [[NSData alloc] initWithBase64EncodedString:base64encodeStr options:0 ];
+            NSData *decoded = [[NSData alloc] initWithBase64EncodedString:base64encodeStr options:NSDataBase64DecodingIgnoreUnknownCharacters ];
             UIImage *srcImage = [[UIImage alloc] initWithData:decoded scale:1];
             NSData *jpgData = UIImageJPEGRepresentation(srcImage, 1);
             UIImage *jpgImage = [[UIImage alloc] initWithData:jpgData];

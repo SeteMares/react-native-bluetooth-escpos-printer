@@ -36,26 +36,25 @@
         _pendingReject(@"PRINT_IMAGE_FAILED",@"PRINT_IMAGE_FAILED",nil);
         _pendingReject = nil;
     }
-    
+
 }
 
 -(void) print
 {
     @synchronized (self) {
-     NSInteger sizePerLine = (int)(_width/8);
-   // do{
-//        if(sizePerLine+_now>=[_toPrint length]){
-//            sizePerLine = [_toPrint length] - _now;
-//        }
-       // if(sizePerLine>0){
-            NSData *subData = [_toPrint subdataWithRange:NSMakeRange(_now, sizePerLine)];
-            NSLog(@"Write data:%@",subData);
-            [RNBluetoothManager writeValue:subData withDelegate:self];
-        //}
+        NSInteger sizePerLine = (int)(_width / 8);
+        if (sizePerLine + _now >= [_toPrint length]) {
+            sizePerLine = [_toPrint length] - _now;
+        }
+        NSLog(@"Procede a imprimir");
+        NSLog(@"_width: %d", _width);
+        NSLog(@"_now: %d", _now);
+        NSLog(@"sizePerLine: %d", sizePerLine);
+        NSData *subData = [_toPrint subdataWithRange:NSMakeRange(_now, sizePerLine)];
+        NSLog(@"Write data:%@",subData);
+        [RNBluetoothManager writeValue:subData withDelegate:self];
         _now = _now+sizePerLine;
         [NSThread sleepForTimeInterval:0.01f];
-        
     }
-    //}while(_now<[_toPrint length]);
 }
 @end
