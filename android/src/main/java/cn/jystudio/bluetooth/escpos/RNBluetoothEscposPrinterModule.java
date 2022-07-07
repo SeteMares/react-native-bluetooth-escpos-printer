@@ -22,6 +22,7 @@ import com.google.zxing.pdf417.PDF417Writer;
 import javax.annotation.Nullable;
 import java.nio.charset.Charset;
 import java.util.*;
+import java.io.ByteArrayOutputStream;
 
 public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
         implements BluetoothServiceStateObserver {
@@ -432,6 +433,44 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
     @ReactMethod
     public void printPDF417(String content, int size, final Promise promise) {
         try {
+            Bitmap bitmap = getBitmapPDF417(content, size);
+
+            if (bitmap == null) {
+              promise.reject("COMMAND_NOT_SEND");
+            }
+
+            byte[] data = PrintPicture.POS_PrintBMP(bitmap, size, 0, 0);
+            if (sendDataByte(data)) {
+                promise.resolve(null);
+            } else {
+                promise.reject("COMMAND_NOT_SEND");
+            }
+        } catch (Exception e) {
+            promise.reject(e.getMessage(), e);
+        }
+    }
+
+    @ReactMethod
+    public void getPDF417Base64(String content, int size, final Promise promise) {
+        try {
+            Bitmap bitmap = getBitmapPDF417(content, size);
+
+            if (bitmap == null) {
+              promise.reject("COMMAND_NOT_SEND");
+            }
+
+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream);
+
+            promise.resolve(Base64.encodeToString(byteArrayOutputStream.toByteArray(), Base64.DEFAULT));
+        } catch (Exception e) {
+            promise.reject(e.getMessage(), e);
+        }
+    }
+
+    private static Bitmap getBitmapPDF417(String content, int size) {
+        Bitmap bitmap = null;
+        try {
             Log.i(TAG, "content：" + content);
             Log.i(TAG, "size：" + size);
             PDF417Writer barcodeWriter = new PDF417Writer();
@@ -453,18 +492,12 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
                 }
             }
 
-            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
             bitmap.setPixels(pixels, 0, width, 0, 0, width, height);
-
-            byte[] data = PrintPicture.POS_PrintBMP(bitmap, size, 0, 0);
-            if (sendDataByte(data)) {
-                promise.resolve(null);
-            } else {
-                promise.reject("COMMAND_NOT_SEND");
-            }
         } catch (Exception e) {
-            promise.reject(e.getMessage(), e);
+            Log.d(TAG, e.getMessage());
         }
+        return bitmap;
     }
 
     @ReactMethod
