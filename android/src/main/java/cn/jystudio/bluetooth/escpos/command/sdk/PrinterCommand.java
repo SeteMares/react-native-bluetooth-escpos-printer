@@ -212,13 +212,11 @@ public class PrinterCommand {
      *
      * @param pszString    要打印的字符串
      * @param encoding     打印字符对应编码
-     * @param codepage     设置代码页(0--255)
      * @param nWidthTimes  倍宽(0--4)
      * @param nHeightTimes 倍高(0--4)
-     * @param nFontType    字体类型(只对Ascii码有效)(0,1 48,49)
      */
     public static byte[] POS_Print_Text(String pszString, String encoding, int nWidthTimes, int nHeightTimes) {
-        if (codepage < 0 || codepage > 255 || pszString == null || "".equals(pszString) || pszString.length() < 1) {
+        if (pszString == null || "".equals(pszString) || pszString.length() < 1) {
             return null;
         }
 
