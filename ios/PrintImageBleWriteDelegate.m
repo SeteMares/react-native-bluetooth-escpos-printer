@@ -42,7 +42,7 @@
 -(void) print
 {
     @synchronized (self) {
-        NSInteger sizePerLine = (int)(_width / 8);
+        NSInteger sizePerLine = (int)(_width / 4);
         if (sizePerLine + _now >= [_toPrint length]) {
             sizePerLine = [_toPrint length] - _now;
         }

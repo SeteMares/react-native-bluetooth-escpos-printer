@@ -165,11 +165,11 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
             } else {
                 sendDataByte(underlineOff());
             }
-            byte[] bytes = text.getBytes(encoding);
 
             sendDataByte(singleByteOff());
             sendDataByte(setCodeSystem(codeParse(encoding)));
 
+            byte[] bytes = text.getBytes(encoding);
             if (sendDataByte(bytes)) {
                 promise.resolve(null);
             } else {
@@ -183,7 +183,7 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
     public static byte[] singleByteOff() {
         byte[] result = new byte[2];
         result[0] = Command.FS;
-        result[1] = 0x26;
+        result[1] = 0x26; //&
         return result;
     }
 

@@ -41,7 +41,7 @@ NSInteger maxRowCount;
 -(void)print{
     [(NSMutableString *)[columns objectAtIndex:_now] appendString:@"\n\r"];//wrap line..
     @try {
-        [self.printer textPrint:[columns objectAtIndex:_now] inEncoding:_encodig withCodePage:_codePage widthTimes:_widthTimes heightTimes:_heightTimes fontType:_fontType delegate:self];
+        [self.printer textPrint:[columns objectAtIndex:_now] inEncoding:_encoding inPosition:@"left" isBold:false isUnderline:false widthTimes:_widthTimes heightTimes:_heightTimes delegate:self];
     }
     @catch (NSException *e){
         NSLog(@"ERROR IN PRINTING COLUMN:%@",e);

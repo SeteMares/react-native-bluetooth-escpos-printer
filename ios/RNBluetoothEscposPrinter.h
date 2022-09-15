@@ -7,10 +7,11 @@
 @property (nonatomic,assign) NSInteger deviceWidth;
 -(void) textPrint:(NSString *) text
        inEncoding:(NSString *) encoding
-     withCodePage:(NSInteger) codePage
+         inPosition:(NSString *) position
+           isBold:(Boolean) isBold
+      isUnderline:(Boolean) isUnderline
        widthTimes:(NSInteger) widthTimes
       heightTimes:(NSInteger) heightTimes
-         fontType:(NSInteger) fontType
          delegate:(NSObject<WriteDataToBleDelegate> *) delegate;
 @end
   

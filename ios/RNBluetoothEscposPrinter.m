@@ -97,7 +97,7 @@ RCT_EXPORT_METHOD(printerInit:(RCTPromiseResolveBlock)resolve
     }else{
         reject(@"COMMAND_NOT_SEND",@"COMMAND_NOT_SEND",nil);
     }
-    
+
 }
 
 //{GS, 'L', 0x00 , 0x00 }
@@ -111,7 +111,7 @@ RCT_EXPORT_METHOD(printerLeftSpace:(int) sp
         reject(@"COMMAND_NOT_SEND",@"INVALID_VALUE",nil);
         return;
     }
-    
+
     if(RNBluetoothManager.isConnected){
         NSMutableData *data = [[NSMutableData alloc] init];
         Byte left[] = {'L'};
@@ -154,34 +154,31 @@ RCT_EXPORT_METHOD(printerUnderLine:(int)sp withResolver:(RCTPromiseResolveBlock)
     }else{
         reject(@"COMMAND_NOT_SEND",@"COMMAND_NOT_SEND",nil);
     }
-    
+
 }
 
 RCT_EXPORT_METHOD(printText:(NSString *) text withOptions:(NSDictionary *) options
                   resolver:(RCTPromiseResolveBlock) resolve rejecter:(RCTPromiseRejectBlock) reject)
 {NSLog(@"printing text...with options: %@",options);
     if(!RNBluetoothManager.isConnected){
-          reject(@"COMMAND_NOT_SEND",@"COMMAND_NOT_SEND",nil);
-    }else{
+        reject(@"COMMAND_NOT_SEND",@"COMMAND_NOT_SEND",nil);
+    } else {
         @try{
-    //encoding:'GBK',
-    //codepage:0,
-    //widthtimes:0,
-    //heigthtimes:0,
-    //fonttype:1
-        NSString *encodig = [options valueForKey:@"encoding"];
-        if(!encodig) encodig=@"GBK";
-            NSInteger codePage = [[options valueForKey:@"codepage"] integerValue];NSLog(@"Got codepage from options: %ld",codePage);
-        if(!codePage) codePage = 0;
-        NSInteger widthTimes = [[options valueForKey:@"widthtimes"] integerValue];
-        if(!widthTimes) widthTimes = 0;
-        NSInteger heigthTime = [[options valueForKey:@"heigthtimes"] integerValue];
-        if(!heigthTime) heigthTime =0;
-        NSInteger fontType = [[options valueForKey:@"fontType"] integerValue];
-        if(!fontType) fontType = 0;
+            NSString *encoding = [options valueForKey:@"encoding"];
+            if(!encoding) encoding=@"GB18030";
+            NSInteger widthTimes = [[options valueForKey:@"widthtimes"] integerValue];
+            if(!widthTimes) widthTimes = 0;
+            NSInteger heigthTime = [[options valueForKey:@"heigthtimes"] integerValue];
+            if(!heigthTime) heigthTime = 0;
+
+            Boolean isBold = [options[@"bold"] boolValue];
+            Boolean isUnderline = [options[@"underline"] boolValue];
+
+            NSString *position = [options valueForKey:@"align"];
+            if(!position) position=@"left";
             pendingResolve = resolve;
             pendingReject = reject;
-            [self textPrint:text inEncoding:encodig withCodePage:codePage widthTimes:widthTimes heightTimes:heigthTime fontType:fontType delegate:self];
+            [self textPrint:text inEncoding:encoding inPosition:position isBold:isBold isUnderline:isUnderline widthTimes:widthTimes heightTimes:heigthTime delegate:self];
         }
         @catch (NSException *e){
             NSLog(@"print text exception: %@",e);
@@ -195,53 +192,92 @@ RCT_EXPORT_METHOD(printText:(NSString *) text withOptions:(NSDictionary *) optio
     if([@"UTF-8" isEqualToString:encoding] || [@"utf-8" isEqualToString:encoding] ){
         nsEncoding = NSUTF8StringEncoding;
     }
-    
+
     return nsEncoding;
 }
 -(void) textPrint:(NSString *) text
        inEncoding:(NSString *) encoding
-     withCodePage:(NSInteger) codePage
+         inPosition:(NSString *) position
+           isBold:(Boolean) isBold
+      isUnderline:(Boolean) isUnderline
        widthTimes:(NSInteger) widthTimes
       heightTimes:(NSInteger) heightTimes
-         fontType:(NSInteger) fontType
      delegate:(NSObject<WriteDataToBleDelegate> *) delegate
 {
     Byte *intToWidth[] = {0x00, 0x10, 0x20, 0x30};
     Byte *intToHeight[] = {0x00, 0x01, 0x02, 0x03};
+
     Byte *multTime[] = {intToWidth[widthTimes],intToHeight[heightTimes]};
     NSData *bytes = [text dataUsingEncoding:[self toNSEncoding:encoding]];
     NSLog(@"Got bytes length:%lu",[bytes length]);
-    
+
     NSMutableData *toSend = [[NSMutableData alloc] init];
-    
-    //gsExclamationMark:{GS, '!', 0x00 };
-    [toSend appendBytes:ESC_GS length:sizeof(ESC_GS)];
-    [toSend appendBytes:SIGN length:sizeof(SIGN)];
-    [toSend appendBytes:multTime length:sizeof(multTime)];
-    //escT:  {ESC, 't', 0x00 };
-    [toSend appendBytes:ESC length:sizeof(ESC)];
-    [toSend appendBytes:T length:sizeof(T)];
-    [toSend appendBytes:&codePage length:sizeof(codePage)];NSLog(@"codepage: %lu",codePage);
-    if(codePage == 0){
-        //FS_and :{FS, '&' };
-        [toSend appendBytes:ESC_FS length:sizeof(ESC_FS)];
-        [toSend appendBytes:AND length:sizeof(AND)];
-    }else{NSLog(@"{FS,46}");
-        //FS_dot: {FS, 46 };
-        NSInteger fourtySix= 46;
-        [toSend appendBytes:ESC_FS length:sizeof(ESC_FS)];
-        [toSend appendBytes:&fourtySix length:sizeof(fourtySix)];
+
+    Byte align[] = {97};
+    [toSend appendBytes:ESC length:1];
+    [toSend appendBytes:align length:1];
+    if([@"right" isEqualToString:position]) {
+        Byte spb[] = {2};
+        [toSend appendBytes:spb length:1];
+    } else if ( [@"center" isEqualToString:position] ) {
+        Byte spb[] = {1};
+        [toSend appendBytes:spb length:1];
+    } else {
+        Byte spb[] = {0};
+        [toSend appendBytes:spb length:1];
     }
-//    escM:{ESC, 'M', 0x00 };
-    [toSend appendBytes:ESC length:sizeof(ESC)];
-    [toSend appendBytes:M length:sizeof(M)];
-    [toSend appendBytes:&fontType length:sizeof(fontType)];
+
+    Byte under_line[] = {45};
+    [toSend appendBytes:ESC length:1];
+    [toSend appendBytes:under_line length:1];
+    if (isUnderline) {
+        Byte spb[] = {1};
+        [toSend appendBytes:spb length:1];
+    } else {
+        Byte spb[] = {0};
+        [toSend appendBytes:spb length:1];
+    }
+
+    Byte bold[] = {69};
+    [toSend appendBytes:ESC length:1];
+    [toSend appendBytes:bold length:1];
+    if (isBold) {
+        Byte spb[] = {1};
+        [toSend appendBytes:spb length:1];
+    } else {
+        Byte spb[] = {0};
+        [toSend appendBytes:spb length:1];
+    }
+
+    //gsExclamationMark:{GS, '!', 0x00 };
+    [toSend appendBytes:ESC_GS length:1];
+    [toSend appendBytes:SIGN length:1];
+    [toSend appendBytes:multTime length:1];
+
+//    //escT:  {ESC, 't', 0x00 };
+//    [toSend appendBytes:ESC length:sizeof(ESC)];
+//    [toSend appendBytes:T length:sizeof(T)];
+//    [toSend appendBytes:&codePage length:sizeof(codePage)];NSLog(@"codepage: %lu",codePage);
+
+    //singleByteOff
+    [toSend appendBytes:ESC_FS length:1];
+    [toSend appendBytes:AND length:1];
+    //setCodeSystem
+    NSInteger fourtyThree = 43;
+    [toSend appendBytes:ESC_FS length:1];
+    [toSend appendBytes:&fourtyThree length:1];
+    if([@"UTF-8" isEqualToString:encoding] || [@"utf-8" isEqualToString:encoding] ){
+        [toSend appendBytes:PIECE length:1];
+    } else {
+        [toSend appendBytes:NUL length:1];
+    }
+
     // text data
     [toSend appendData:bytes];
     //LF
    // [toSend appendBytes:&NL length:sizeof(NL)];
-  
-    NSLog(@"Goting to write text : %@",text);
+
+    NSLog(@"Going to write text : %@",text);
     NSLog(@"With data: %@",toSend);
     [RNBluetoothManager writeValue:toSend withDelegate:delegate];
 }
@@ -303,16 +339,12 @@ RCT_EXPORT_METHOD(printColumn:(NSArray *)columnWidths
         reject(@"COMMAND_NOT_SEND",@"COMMAND_NOT_SEND",nil);
     }else{
         @try{
-            NSString *encodig = [options valueForKey:@"encoding"];
-            if(!encodig) encodig=@"GBK";
-            NSInteger codePage = [[options valueForKey:@"codepage"] integerValue];NSLog(@"Got codepage from options: %ld",codePage);
-            if(!codePage) codePage = 0;
+            NSString *encoding = [options valueForKey:@"encoding"];
+            if(!encoding) encoding=@"GBK";
             NSInteger widthTimes = [[options valueForKey:@"widthtimes"] integerValue];
             if(!widthTimes) widthTimes = 0;
             NSInteger heigthTime = [[options valueForKey:@"heigthtimes"] integerValue];
             if(!heigthTime) heigthTime =0;
-            NSInteger fontType = [[options valueForKey:@"fontType"] integerValue];
-            if(!fontType) fontType = 0;
           /**
                  * [column1-1,
                  * column1-2,
@@ -326,7 +358,7 @@ RCT_EXPORT_METHOD(printColumn:(NSArray *)columnWidths
                  *
                  */
             NSMutableArray *table =[[NSMutableArray alloc] init];
-            
+
                 /**splits the column text to few rows and applies the alignment **/
                 int padding = 1;
                 for(int i=0;i< [columnWidths count];i++){
@@ -338,7 +370,7 @@ RCT_EXPORT_METHOD(printColumn:(NSArray *)columnWidths
                     int shorter = 0;
                     int counter = 0;
                    NSMutableString *temp = [[NSMutableString alloc] init];
-                   
+
                     for(int c=0;c<[text length];c++){
                         unichar ch = [text characterAtIndex:c];
                         int l = (ch>= 0x4e00 && ch <= 0x9fff)?2:1;
@@ -365,7 +397,7 @@ RCT_EXPORT_METHOD(printColumn:(NSArray *)columnWidths
                         [splited addObject:css];
                     }
                     NSInteger align =[[columnAligns objectAtIndex:i] integerValue];
-            
+
                     NSMutableArray *formated = [[NSMutableArray alloc] init];
                     for(ColumnSplitedString *s in splited){
                         NSMutableString *empty = [[NSMutableString alloc] init];
@@ -395,7 +427,7 @@ RCT_EXPORT_METHOD(printColumn:(NSArray *)columnWidths
                     }
                     [table addObject:formated];
                 }
-            
+
             /**  try to find the max row count of the table **/
                 NSInteger maxRowCount = 0;
                 for(int i=0;i<[table count]/*column count*/;i++){
@@ -404,7 +436,7 @@ RCT_EXPORT_METHOD(printColumn:(NSArray *)columnWidths
                         maxRowCount = [rows count];// try to find the max row count;
                     }
                 }
-            
+
                 /** loop table again to fill the rows **/
             NSMutableArray<NSMutableString *> *rowsToPrint = [[NSMutableArray alloc] init];
                 for(int column=0;column<[table count]/*column count*/;column++){
@@ -426,7 +458,7 @@ RCT_EXPORT_METHOD(printColumn:(NSArray *)columnWidths
                         }
                     }
                 }
-            
+
                 /** loops the rows and print **/
             PrintColumnBleWriteDelegate *delegate = [[PrintColumnBleWriteDelegate alloc] init];
             delegate.now = 0;
@@ -434,11 +466,9 @@ RCT_EXPORT_METHOD(printColumn:(NSArray *)columnWidths
             delegate.pendingReject = reject;
             delegate.pendingResolve =resolve;
             delegate.canceled = false;
-            delegate.encodig = encodig;
+            delegate.encoding = encoding;
             delegate.widthTimes = widthTimes;
             delegate.heightTimes = heigthTime;
-            delegate.fontType = fontType;
-            delegate.codePage = codePage;
             delegate.printer = self;
             [delegate printColumn:rowsToPrint withMaxcount:maxRowCount];
         }
@@ -446,7 +476,7 @@ RCT_EXPORT_METHOD(printColumn:(NSArray *)columnWidths
             NSLog(@"print text exception: %@",[e callStackSymbols]);
             reject(e.name.description,e.name.description,nil);
         }
-        
+
     }
 }
 
@@ -495,7 +525,7 @@ RCT_EXPORT_METHOD(printPic:(NSString *) base64encodeStr withOptions:(NSDictionar
                 scaled = [ImageUtils imagePadLeft:paddingLeft withSource:scaled];
                 size =[scaled size];
             }
-            
+
             unsigned char * graImage = [ImageUtils imageToGreyImage:scaled];
             unsigned char * formatedData = [ImageUtils format_K_threshold:graImage width:size.width height:size.height];
             NSData *dataToPrint = [ImageUtils eachLinePixToCmd:formatedData nWidth:size.width nHeight:size.height nMode:0];
@@ -528,7 +558,7 @@ RCT_EXPORT_METHOD(printQRCode:(NSString *)content
     hints.encoding=NSUTF8StringEncoding;
     hints.margin=0;
     hints.errorCorrectionLevel = [self findCorrectionLevel:correctionLevel];
-    
+
     ZXMultiFormatWriter *writer = [ZXMultiFormatWriter writer];
     ZXBitMatrix *result = [writer encode:content
                                   format:kBarcodeFormatQRCode
@@ -539,8 +569,7 @@ RCT_EXPORT_METHOD(printQRCode:(NSString *)content
     if(error || !result){
         reject(@"ERROR_IN_CREATE_QRCODE",@"ERROR_IN_CREATE_QRCODE",nil);
     }else{
-        CGImageRef image = [[ZXImage imageWithMatrix:result] cgimage];
-        uint8_t * graImage = [ImageUtils imageToGreyImage:[UIImage imageWithCGImage:image]];
+        uint8_t * graImage = [ImageUtils imageToGreyImage:[[UIImage alloc] initWithCGImage:[[ZXImage imageWithMatrix:result] cgimage]]];
         unsigned char * formatedData = [ImageUtils format_K_threshold:graImage width:size height:size];
         NSData *dataToPrint = [ImageUtils eachLinePixToCmd:formatedData nWidth:size nHeight:size nMode:0];
         PrintImageBleWriteDelegate *delegate = [[PrintImageBleWriteDelegate alloc] init];
@@ -565,7 +594,7 @@ RCT_EXPORT_METHOD(printBarCode:(NSString *) str withType:(NSInteger)
           reject(@"INVALID_PARAMETER",@"INVALID_PARAMETER",nil);
           return;
       }
-    
+
     NSData *conentData = [str dataUsingEncoding:CFStringConvertEncodingToNSStringEncoding(kCFStringEncodingGB_18030_2000)];
     NSMutableData *toPrint = [[NSMutableData alloc] init];
     int8_t * command = malloc(16);
@@ -587,7 +616,7 @@ RCT_EXPORT_METHOD(printBarCode:(NSString *) str withType:(NSInteger)
         command[15] = [conentData length];
     [toPrint appendBytes:command length:16];
     [toPrint appendData:conentData];
-    
+
     pendingReject = reject;
     pendingResolve = resolve;
     [RNBluetoothManager writeValue:toPrint withDelegate:self];
