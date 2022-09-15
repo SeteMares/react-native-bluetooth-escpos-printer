@@ -49,3 +49,7 @@ ios/ZXingObjC-3.2.2/examples/
 ios/ZXingObjC-3.2.2/ZXingObjCTests/
 
 android/src/main/gen/
+android/gradle/wrapper/gradle-wrapper.jar
+android/gradle/wrapper/gradle-wrapper.properties
+android/gradlew
+android/gradlew.bat

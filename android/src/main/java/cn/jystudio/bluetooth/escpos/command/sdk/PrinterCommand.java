@@ -217,8 +217,7 @@ public class PrinterCommand {
      * @param nHeightTimes 倍高(0--4)
      * @param nFontType    字体类型(只对Ascii码有效)(0,1 48,49)
      */
-    public static byte[] POS_Print_Text(String pszString, String encoding, int codepage,
-                                        int nWidthTimes, int nHeightTimes, int nFontType) {
+    public static byte[] POS_Print_Text(String pszString, String encoding, int nWidthTimes, int nHeightTimes) {
         if (codepage < 0 || codepage > 255 || pszString == null || "".equals(pszString) || pszString.length() < 1) {
             return null;
         }
@@ -234,12 +233,8 @@ public class PrinterCommand {
         byte[] intToHeight = {0x00, 0x01, 0x02, 0x03};
         byte[] gsExclamationMark = Arrays.copyOf(Command.GS_ExclamationMark, Command.GS_ExclamationMark.length);
         gsExclamationMark[2] = (byte) (intToWidth[nWidthTimes] + intToHeight[nHeightTimes]);
-        byte[] escT = Arrays.copyOf(Command.ESC_t, Command.ESC_t.length);
-        escT[2] = (byte) codepage;
-        byte[] escM = Arrays.copyOf(Command.ESC_M, Command.ESC_M.length);
-        escM[2] = (byte) nFontType;
         byte[] data = null;
-        data = concatAll(gsExclamationMark, escT, escM, pbString);
+        data = concatAll(gsExclamationMark, pbString);
         
         return data;
     }

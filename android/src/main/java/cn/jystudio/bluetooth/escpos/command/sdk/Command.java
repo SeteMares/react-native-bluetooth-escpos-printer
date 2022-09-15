@@ -2,16 +2,16 @@ package cn.jystudio.bluetooth.escpos.command.sdk;
 
 public class Command {
 
-	private static final byte ESC = 0x1B;
-	private static final byte FS = 0x1C;
-	private static final byte GS = 0x1D;
-	private static final byte US = 0x1F;
-	private static final byte DLE = 0x10;
-	private static final byte DC4 = 0x14;
-	private static final byte DC1 = 0x11;
-	private static final byte SP = 0x20;
-	private static final byte NL = 0x0A;
-	private static final byte FF = 0x0C;
+	public static final byte ESC = 0x1B;
+	public static final byte FS = 0x1C;
+	public static final byte GS = 0x1D;
+	public static final byte US = 0x1F;
+	public static final byte DLE = 0x10;
+	public static final byte DC4 = 0x14;
+	public static final byte DC1 = 0x11;
+	public static final byte SP = 0x20;
+	public static final byte NL = 0x0A;
+	public static final byte FF = 0x0C;
 	public static final byte PIECE = (byte) 0xFF;
 	public static final byte NUL = (byte) 0x00;
 	

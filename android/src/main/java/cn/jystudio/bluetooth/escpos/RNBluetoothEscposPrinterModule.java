@@ -1,4 +1,3 @@
-
 package cn.jystudio.bluetooth.escpos;
 
 import android.graphics.Bitmap;
@@ -59,54 +58,55 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
     }
 
     @ReactMethod
-    public void printerInit(final Promise promise){
-        if(sendDataByte(PrinterCommand.POS_Set_PrtInit())){
+    public void printerInit(final Promise promise) {
+        if (sendDataByte(PrinterCommand.POS_Set_PrtInit())) {
             promise.resolve(null);
-        }else{
+        } else {
             promise.reject("COMMAND_NOT_SEND");
         }
     }
 
     @ReactMethod
-    public void printAndFeed(int feed,final Promise promise){
-        if(sendDataByte(PrinterCommand.POS_Set_PrtAndFeedPaper(feed))){
+    public void printAndFeed(int feed, final Promise promise) {
+        if (sendDataByte(PrinterCommand.POS_Set_PrtAndFeedPaper(feed))) {
             promise.resolve(null);
-        }else{
+        } else {
             promise.reject("COMMAND_NOT_SEND");
         }
     }
 
     @ReactMethod
-    public void printerLeftSpace(int sp,final Promise promise){
-        if(sendDataByte(PrinterCommand.POS_Set_LeftSP(sp))){
+    public void printerLeftSpace(int sp, final Promise promise) {
+        if (sendDataByte(PrinterCommand.POS_Set_LeftSP(sp))) {
             promise.resolve(null);
-        }else{
+        } else {
             promise.reject("COMMAND_NOT_SEND");
         }
     }
 
     @ReactMethod
-    public void printerLineSpace(int sp,final Promise promise){
+    public void printerLineSpace(int sp, final Promise promise) {
         byte[] command = PrinterCommand.POS_Set_DefLineSpace();
-        if(sp>0){
+        if (sp > 0) {
             command = PrinterCommand.POS_Set_LineSpace(sp);
         }
-        if(command==null || !sendDataByte(command)){
+        if (command == null || !sendDataByte(command)) {
             promise.reject("COMMAND_NOT_SEND");
-        }else{
+        } else {
             promise.resolve(null);
         }
     }
 
     /**
      * Under line switch, 0-off,1-on,2-deeper
+     *
      * @param line 0-off,1-on,2-deeper
      */
     @ReactMethod
-    public void printerUnderLine(int line,final Promise promise){
-        if(sendDataByte(PrinterCommand.POS_Set_UnderLine(line))){
+    public void printerUnderLine(int line, final Promise promise) {
+        if (sendDataByte(PrinterCommand.POS_Set_UnderLine(line))) {
             promise.resolve(null);
-        }else{
+        } else {
             promise.reject("COMMAND_NOT_SEND");
         }
     }
@@ -115,68 +115,198 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
      * When n=0 or 48, left justification is enabled
      * When n=1 or 49, center justification is enabled
      * When n=2 or 50, right justification is enabled
+     *
      * @param align
      * @param promise
      */
     @ReactMethod
-    public void printerAlign(int align,final Promise promise){
-        Log.d(TAG,"Align:"+align);
-        if(sendDataByte(PrinterCommand.POS_S_Align(align))){
+    public void printerAlign(int align, final Promise promise) {
+        Log.d(TAG, "Align:" + align);
+        if (sendDataByte(PrinterCommand.POS_S_Align(align))) {
             promise.resolve(null);
-        }else{
+        } else {
             promise.reject("COMMAND_NOT_SEND");
         }
     }
 
 
     @ReactMethod
-    public void printText(String text, @Nullable  ReadableMap options, final Promise promise) {
+    public void printText(String text, @Nullable ReadableMap options, final Promise promise) {
         try {
-            String encoding = "GBK";
-            int codepage = 0;
-            int widthTimes = 0;
-            int heigthTimes=0;
-            int fonttype=0;
-            if(options!=null) {
-                encoding = options.hasKey("encoding") ? options.getString("encoding") : "GBK";
-                codepage = options.hasKey("codepage") ? options.getInt("codepage") : 0;
-                widthTimes = options.hasKey("widthtimes") ? options.getInt("widthtimes") : 0;
-                heigthTimes = options.hasKey("heigthtimes") ? options.getInt("heigthtimes") : 0;
-                fonttype = options.hasKey("fonttype") ? options.getInt("fonttype") : 0;
+            String encoding = "GB18030";
+            boolean isBold = false;
+            boolean isUnderLine = false;
+            String position = "left";
+            if (options != null) {
+                encoding = options.hasKey("encoding") ? options.getString("encoding") : "GB18030";
+                isBold = options.hasKey("bold") && options.getBoolean("bold");
+                isUnderLine = options.hasKey("underline") && options.getBoolean("underline");
+                position = options.hasKey("align") ? options.getString("align") : "left";
             }
-            String toPrint = text;
-//            if ("UTF-8".equalsIgnoreCase(encoding)) {
-//                byte[] b = text.getBytes("UTF-8");
-//                toPrint = new String(b, Charset.forName(encoding));
-//            }
 
-            byte[] bytes = PrinterCommand.POS_Print_Text(toPrint, encoding, codepage, widthTimes, heigthTimes, fonttype);
+            byte[] send;
+            if ("right".equalsIgnoreCase(position)) {
+                send = alignRight();
+            } else if ("center".equalsIgnoreCase(position)) {
+                send = alignCenter();
+            } else {
+                send = alignLeft();
+            }
+            sendDataByte(send);
+
+            if (isBold) {
+                sendDataByte(boldOn());
+            } else {
+                sendDataByte(boldOff());
+            }
+
+            if (isUnderLine) {
+                sendDataByte(underlineWithOneDotWidthOn());
+            } else {
+                sendDataByte(underlineOff());
+            }
+            byte[] bytes = text.getBytes(encoding);
+
+            sendDataByte(singleByteOff());
+            sendDataByte(setCodeSystem(codeParse(encoding)));
+
             if (sendDataByte(bytes)) {
                 promise.resolve(null);
             } else {
                 promise.reject("COMMAND_NOT_SEND");
             }
-        }catch (Exception e){
-            promise.reject(e.getMessage(),e);
+        } catch (Exception e) {
+            promise.reject(e.getMessage(), e);
         }
     }
 
+    public static byte[] singleByteOff() {
+        byte[] result = new byte[2];
+        result[0] = Command.FS;
+        result[1] = 0x26;
+        return result;
+    }
+
+    public static byte[] setCodeSystem(byte charset) {
+        byte[] result = new byte[3];
+        result[0] = Command.FS;
+        result[1] = 0x43;
+        result[2] = charset;
+        return result;
+    }
+
+    private byte codeParse(String encoding) {
+        byte res = 0x00;
+        if ("UTF-8".equalsIgnoreCase(encoding)) {
+            return (byte) 0xff;
+        }
+        return res;
+    }
+
+
+    /**
+     * 居左
+     */
+    public static byte[] alignLeft() {
+        byte[] result = new byte[3];
+        result[0] = Command.ESC;
+        result[1] = 97;
+        result[2] = 0;
+        return result;
+    }
+
+    /**
+     * 居中对齐
+     */
+    public static byte[] alignCenter() {
+        byte[] result = new byte[3];
+        result[0] = Command.ESC;
+        result[1] = 97;
+        result[2] = 1;
+        return result;
+    }
+
+    /**
+     * 居右
+     */
+    public static byte[] alignRight() {
+        byte[] result = new byte[3];
+        result[0] = Command.ESC;
+        result[1] = 97;
+        result[2] = 2;
+        return result;
+    }
+
+    // ------------------------bold-----------------------------
+
+    /**
+     * 字体加粗
+     */
+    public static byte[] boldOn() {
+        byte[] result = new byte[3];
+        result[0] = Command.ESC;
+        result[1] = 69;
+        result[2] = 0xF;
+        return result;
+    }
+
+    /**
+     * 取消字体加粗
+     */
+    public static byte[] boldOff() {
+        byte[] result = new byte[3];
+        result[0] = Command.ESC;
+        result[1] = 69;
+        result[2] = 0;
+        return result;
+    }
+
+
+    // ------------------------underline-----------------------------
+    //设置下划线1点
+    public static byte[] underlineWithOneDotWidthOn() {
+        byte[] result = new byte[3];
+        result[0] = Command.ESC;
+        result[1] = 45;
+        result[2] = 1;
+        return result;
+    }
+
+    //设置下划线2点
+    public static byte[] underlineWithTwoDotWidthOn() {
+        byte[] result = new byte[3];
+        result[0] = Command.ESC;
+        result[1] = 45;
+        result[2] = 2;
+        return result;
+    }
+
+    //取消下划线
+    public static byte[] underlineOff() {
+        byte[] result = new byte[3];
+        result[0] = Command.ESC;
+        result[1] = 45;
+        result[2] = 0;
+        return result;
+    }
+
+
     @ReactMethod
-    public void printColumn(ReadableArray columnWidths,ReadableArray columnAligns,ReadableArray columnTexts,
-                            @Nullable ReadableMap options,final Promise promise){
-        if(columnWidths.size()!=columnTexts.size() || columnWidths.size()!=columnAligns.size()){
+    public void printColumn(ReadableArray columnWidths, ReadableArray columnAligns, ReadableArray columnTexts,
+                            @Nullable ReadableMap options, final Promise promise) {
+        if (columnWidths.size() != columnTexts.size() || columnWidths.size() != columnAligns.size()) {
             promise.reject("COLUMN_WIDTHS_ALIGNS_AND_TEXTS_NOT_MATCH");
             return;
         }
-            int totalLen = 0;
-            for(int i=0;i<columnWidths.size();i++){
-                totalLen+=columnWidths.getInt(i);
-            }
-            int maxLen = deviceWidth/8;
-            if(totalLen>maxLen){
-                promise.reject("COLUNM_WIDTHS_TOO_LARGE");
-                return;
-            }
+        int totalLen = 0;
+        for (int i = 0; i < columnWidths.size(); i++) {
+            totalLen += columnWidths.getInt(i);
+        }
+        int maxLen = deviceWidth / 8;
+        if (totalLen > maxLen) {
+            promise.reject("COLUNM_WIDTHS_TOO_LARGE");
+            return;
+        }
 
         String encoding = "GBK";
         int codepage = 0;
@@ -190,7 +320,7 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
             heigthTimes = options.hasKey("heigthtimes") ? options.getInt("heigthtimes") : 0;
             fonttype = options.hasKey("fonttype") ? options.getInt("fonttype") : 0;
         }
-        Log.d(TAG,"encoding: "+encoding);
+        Log.d(TAG, "encoding: " + encoding);
 
         /**
          * [column1-1,
@@ -208,56 +338,56 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
 
         /**splits the column text to few rows and applies the alignment **/
         int padding = 1;
-        for(int i=0;i<columnWidths.size();i++){
-            int width =columnWidths.getInt(i)-padding;//1 char padding
+        for (int i = 0; i < columnWidths.size(); i++) {
+            int width = columnWidths.getInt(i) - padding;//1 char padding
             String text = String.copyValueOf(columnTexts.getString(i).toCharArray());
             List<ColumnSplitedString> splited = new ArrayList<ColumnSplitedString>();
             int shorter = 0;
             int counter = 0;
             String temp = "";
-            for(int c=0;c<text.length();c++){
+            for (int c = 0; c < text.length(); c++) {
                 char ch = text.charAt(c);
-                int l = isChinese(ch)?2:1;
-                if (l==2){
+                int l = isChinese(ch) ? 2 : 1;
+                if (l == 2) {
                     shorter++;
                 }
-                temp=temp+ch;
+                temp = temp + ch;
 
-                if(counter+l<width){
-                   counter = counter+l;
-                }else{
-                    splited.add(new ColumnSplitedString(shorter,temp));
+                if (counter + l < width) {
+                    counter = counter + l;
+                } else {
+                    splited.add(new ColumnSplitedString(shorter, temp));
                     temp = "";
-                    counter=0;
-                    shorter=0;
+                    counter = 0;
+                    shorter = 0;
                 }
             }
-            if(temp.length()>0) {
-                splited.add(new ColumnSplitedString(shorter,temp));
+            if (temp.length() > 0) {
+                splited.add(new ColumnSplitedString(shorter, temp));
             }
             int align = columnAligns.getInt(i);
 
             List<String> formated = new ArrayList<String>();
-            for(ColumnSplitedString s: splited){
+            for (ColumnSplitedString s : splited) {
                 StringBuilder empty = new StringBuilder();
-                for(int w=0;w<(width+padding-s.getShorter());w++){
+                for (int w = 0; w < (width + padding - s.getShorter()); w++) {
                     empty.append(" ");
                 }
                 int startIdx = 0;
                 String ss = s.getStr();
-                if(align == 1 && ss.length()<(width-s.getShorter())){
-                    startIdx = (width-s.getShorter()-ss.length())/2;
-                    if(startIdx+ss.length()>width-s.getShorter()){
+                if (align == 1 && ss.length() < (width - s.getShorter())) {
+                    startIdx = (width - s.getShorter() - ss.length()) / 2;
+                    if (startIdx + ss.length() > width - s.getShorter()) {
                         startIdx--;
                     }
-                    if(startIdx<0){
-                        startIdx=0;
+                    if (startIdx < 0) {
+                        startIdx = 0;
                     }
-                }else if(align==2 && ss.length()<(width-s.getShorter())){
-                    startIdx =width - s.getShorter()-ss.length();
+                } else if (align == 2 && ss.length() < (width - s.getShorter())) {
+                    startIdx = width - s.getShorter() - ss.length();
                 }
-                Log.d(TAG,"empty.replace("+startIdx+","+(startIdx+ss.length())+","+ss+")");
-                empty.replace(startIdx,startIdx+ss.length(),ss);
+                Log.d(TAG, "empty.replace(" + startIdx + "," + (startIdx + ss.length()) + "," + ss + ")");
+                empty.replace(startIdx, startIdx + ss.length(), ss);
                 formated.add(empty.toString());
             }
             table.add(formated);
@@ -266,44 +396,46 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
 
         /**  try to find the max row count of the table **/
         int maxRowCount = 0;
-        for(int i=0;i<table.size()/*column count*/;i++){
+        for (int i = 0; i < table.size()/*column count*/; i++) {
             List<String> rows = table.get(i); // row data in current column
-            if(rows.size()>maxRowCount){maxRowCount = rows.size();}// try to find the max row count;
+            if (rows.size() > maxRowCount) {
+                maxRowCount = rows.size();
+            }// try to find the max row count;
         }
 
         /** loop table again to fill the rows **/
         StringBuilder[] rowsToPrint = new StringBuilder[maxRowCount];
-        for(int column=0;column<table.size()/*column count*/;column++){
+        for (int column = 0; column < table.size()/*column count*/; column++) {
             List<String> rows = table.get(column); // row data in current column
-            for(int row=0;row<maxRowCount;row++){
-                if(rowsToPrint[row]==null){
+            for (int row = 0; row < maxRowCount; row++) {
+                if (rowsToPrint[row] == null) {
                     rowsToPrint[row] = new StringBuilder();
                 }
-                if(row<rows.size()){
+                if (row < rows.size()) {
                     //got the row of this column
                     rowsToPrint[row].append(rows.get(row));
-                }else{
-                    int w =columnWidths.getInt(column);
+                } else {
+                    int w = columnWidths.getInt(column);
                     StringBuilder empty = new StringBuilder();
-                   for(int i=0;i<w;i++){
-                       empty.append(" ");
-                   }
+                    for (int i = 0; i < w; i++) {
+                        empty.append(" ");
+                    }
                     rowsToPrint[row].append(empty.toString());//Append spaces to ensure the format
                 }
             }
         }
 
         /** loops the rows and print **/
-        for(int i=0;i<rowsToPrint.length;i++){
+        for (int i = 0; i < rowsToPrint.length; i++) {
             rowsToPrint[i].append("\n\r");//wrap line..
             try {
 //                byte[] toPrint = rowsToPrint[i].toString().getBytes("UTF-8");
 //                String text = new String(toPrint, Charset.forName(encoding));
-                if (!sendDataByte(PrinterCommand.POS_Print_Text(rowsToPrint[i].toString(), encoding, codepage, widthTimes, heigthTimes, fonttype))) {
+                if (!sendDataByte(PrinterCommand.POS_Print_Text(rowsToPrint[i].toString(), encoding, widthTimes, heigthTimes))) {
                     promise.reject("COMMAND_NOT_SEND");
                     return;
                 }
-            }catch (Exception e){
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }
@@ -316,16 +448,16 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
     }
 
     @ReactMethod
-    public void printPic(String base64encodeStr, @Nullable  ReadableMap options) {
+    public void printPic(String base64encodeStr, @Nullable ReadableMap options) {
         int width = 0;
         int leftPadding = 0;
-        if(options!=null){
+        if (options != null) {
             width = options.hasKey("width") ? options.getInt("width") : 0;
-            leftPadding = options.hasKey("left")?options.getInt("left") : 0;
+            leftPadding = options.hasKey("left") ? options.getInt("left") : 0;
         }
 
         //cannot larger then devicesWith;
-        if(width > deviceWidth || width == 0){
+        if (width > deviceWidth || width == 0) {
             width = deviceWidth;
         }
 
@@ -362,22 +494,23 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
 
     /**
      * Rotate 90 degree, 0-no rotate, 1-rotate
-     * @param rotate  0-no rotate, 1-rotate
+     *
+     * @param rotate 0-no rotate, 1-rotate
      */
     @ReactMethod
-    public void rotate(int rotate,final Promise promise) {
-        if(sendDataByte(PrinterCommand.POS_Set_Rotate(rotate))){
+    public void rotate(int rotate, final Promise promise) {
+        if (sendDataByte(PrinterCommand.POS_Set_Rotate(rotate))) {
             promise.resolve(null);
-        }else{
+        } else {
             promise.reject("COMMAND_NOT_SEND");
         }
     }
 
     @ReactMethod
-    public void setBlob(int weight,final Promise promise) {
-        if(sendDataByte(PrinterCommand.POS_Set_Bold(weight))){
+    public void setBlob(int weight, final Promise promise) {
+        if (sendDataByte(PrinterCommand.POS_Set_Bold(weight))) {
             promise.resolve(null);
-        }else{
+        } else {
             promise.reject("COMMAND_NOT_SEND");
         }
     }
@@ -436,11 +569,11 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
 
     @ReactMethod
     public void openDrawer(int nMode, int nTime1, int nTime2) {
-        try{
+        try {
             byte[] command = PrinterCommand.POS_Set_Cashbox(nMode, nTime1, nTime2);
             sendDataByte(command);
 
-         }catch (Exception e){
+        } catch (Exception e) {
             Log.d(TAG, e.getMessage());
         }
     }
@@ -448,17 +581,17 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
 
     @ReactMethod
     public void cutOnePoint() {
-        try{
+        try {
             byte[] command = PrinterCommand.POS_Cut_One_Point();
             sendDataByte(command);
 
-         }catch (Exception e){
+        } catch (Exception e) {
             Log.d(TAG, e.getMessage());
         }
-    }    
+    }
 
     private boolean sendDataByte(byte[] data) {
-        if (data==null || mService.getState() != BluetoothService.STATE_CONNECTED) {
+        if (data == null || mService.getState() != BluetoothService.STATE_CONNECTED) {
             return false;
         }
         mService.write(data);
@@ -487,7 +620,7 @@ public class RNBluetoothEscposPrinterModule extends ReactContextBaseJavaModule
 
     /****************************************************************************************************/
 
-    private static class ColumnSplitedString{
+    private static class ColumnSplitedString {
         private int shorter;
         private String str;
 
