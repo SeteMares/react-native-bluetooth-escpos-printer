@@ -2,6 +2,9 @@ package cn.jystudio.bluetooth;
 
 
 import android.app.Activity;
+import android.os.ParcelUuid;
+import android.os.Build;
+import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
@@ -24,9 +27,11 @@ import org.json.JSONException;
 
 import javax.annotation.Nullable;
 
+import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 /**
@@ -44,7 +49,6 @@ public class RNBluetoothManagerModule extends ReactContextBaseJavaModule
     public static final String EVENT_UNABLE_CONNECT = "EVENT_UNABLE_CONNECT";
     public static final String EVENT_CONNECTED = "EVENT_CONNECTED";
     public static final String EVENT_BLUETOOTH_NOT_SUPPORT = "EVENT_BLUETOOTH_NOT_SUPPORT";
-
 
     // Intent request codes
     private static final int REQUEST_CONNECT_DEVICE = 1;
@@ -69,6 +73,8 @@ public class RNBluetoothManagerModule extends ReactContextBaseJavaModule
     private static final String PROMISE_SCAN = "SCAN";
     private static final String PROMISE_CONNECT = "CONNECT";
 
+    private static final Map<String, String> manufacturerData = new HashMap<>();
+
     private JSONArray pairedDevice = new JSONArray();
     private JSONArray foundDevice = new JSONArray();
     // Name of the connected device
@@ -78,12 +84,26 @@ public class RNBluetoothManagerModule extends ReactContextBaseJavaModule
     // Member object for the services
     private BluetoothService mService = null;
 
+    // Class to hold the vendor information from the JSON
+    private static class Vendor {
+        String macPrefix;
+        String vendorName;
+
+        Vendor(String macPrefix, String vendorName) {
+            this.macPrefix = macPrefix;
+            this.vendorName = vendorName;
+        }
+    }
+
     public RNBluetoothManagerModule(ReactApplicationContext reactContext, BluetoothService bluetoothService) {
         super(reactContext);
         this.reactContext = reactContext;
         this.reactContext.addActivityEventListener(this);
         this.mService = bluetoothService;
         this.mService.addStateObserver(this);
+        if (manufacturerData.isEmpty()) {
+            loadVendorData(reactContext);  // Load vendor data on first use
+        }
         // Register for broadcasts when a device is discovered
         IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
@@ -141,6 +161,8 @@ public class RNBluetoothManagerModule extends ReactContextBaseJavaModule
                     JSONObject obj = new JSONObject();
                     obj.put("name", d.getName());
                     obj.put("address", d.getAddress());
+                    obj.put("type", identifyDeviceType(d));
+                    obj.put("manufacturer", getManufacturerFromMacAddress(d));
                     pairedDevice.pushString(obj.toString());
                 } catch (Exception e) {
                     Log.e(TAG, "Error creating JSON object for paired device", e);
@@ -187,22 +209,46 @@ public class RNBluetoothManagerModule extends ReactContextBaseJavaModule
             promise.reject(EVENT_BLUETOOTH_NOT_SUPPORT, "Bluetooth not supported");
         } else {
             cancelDiscovery();
-            int permissionChecked = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.ACCESS_FINE_LOCATION);
-            if (permissionChecked == PackageManager.PERMISSION_DENIED) {
-                Log.d(TAG, "D: Permission ACCESS_FINE_LOCATION denied, requesting permission...");
-                ActivityCompat.requestPermissions(reactContext.getCurrentActivity(),
-                         new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION},
-                         REQUEST_ACCESS_FINE_LOCATION_PERMISSION);
+            // Check Android version
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // For Android 12+ (API level 31 and above), check for Bluetooth permissions
+                int permissionCheckedScan = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.BLUETOOTH_SCAN);
+                int permissionCheckedConnect = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.BLUETOOTH_CONNECT);
+                int permissionCheckedLocation = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.ACCESS_FINE_LOCATION);
+
+                if (permissionCheckedScan == PackageManager.PERMISSION_DENIED ||
+                    permissionCheckedConnect == PackageManager.PERMISSION_DENIED ||
+                    permissionCheckedLocation == PackageManager.PERMISSION_DENIED) {
+
+                    // Request necessary permissions
+                    ActivityCompat.requestPermissions(reactContext.getCurrentActivity(),
+                            new String[]{
+                                    android.Manifest.permission.BLUETOOTH_SCAN,
+                                    android.Manifest.permission.BLUETOOTH_CONNECT,
+                                    android.Manifest.permission.ACCESS_FINE_LOCATION
+                            }, 1);
+                }
+            } else {
+                // For Android versions below 12, only need ACCESS_FINE_LOCATION permission
+                int permissionCheckedLocation = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.ACCESS_FINE_LOCATION);
+
+                if (permissionCheckedLocation == PackageManager.PERMISSION_DENIED) {
+                    // Request location permission
+                    ActivityCompat.requestPermissions(reactContext.getCurrentActivity(),
+                            new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, 1);
+                }
             }
 
             pairedDevice = new JSONArray();
             foundDevice = new JSONArray();
-            Set<BluetoothDevice> bondedDevices = adapter.getBondedDevices();
-            for (BluetoothDevice device : bondedDevices) {
+            Set<BluetoothDevice> boundDevices = adapter.getBondedDevices();
+            for (BluetoothDevice d : boundDevices) {
                 try {
                     JSONObject obj = new JSONObject();
-                    obj.put("name", device.getName());
-                    obj.put("address", device.getAddress());
+                    obj.put("name", d.getName());
+                    obj.put("address", d.getAddress());
+                    obj.put("type", identifyDeviceType(d));
+                    obj.put("manufacturer", getManufacturerFromMacAddress(d));
                     pairedDevice.put(obj);
                 } catch (JSONException e) {
                     Log.e(TAG, "E: Error while creating JSON object for paired device", e);
@@ -224,6 +270,152 @@ public class RNBluetoothManagerModule extends ReactContextBaseJavaModule
             }
         }
     }
+
+    public static void loadVendorData(Context context) {
+        try {
+            InputStream inputStream = context.getAssets().open("vendor_data.json"); // Put your JSON file in the assets folder
+            // Read the input stream into a string
+            int size = inputStream.available();
+            byte[] buffer = new byte[size];
+            inputStream.read(buffer);
+            inputStream.close();
+
+            // Convert the byte array into a string
+            String jsonData = new String(buffer);
+
+            // Parse the JSON string into a JSONObject
+            JSONObject jsonObject = new JSONObject(jsonData);
+
+            // Iterate through the JSON object and populate the map
+            for (Iterator<String> it = jsonObject.keys(); it.hasNext();) {
+                String key = it.next();
+                String value = jsonObject.getString(key);
+                // Remove hyphens from the MAC address prefix (key)
+                String formattedKey = key.replace("-", "").toUpperCase();
+                manufacturerData.put(formattedKey, value); // Store with uppercase key
+            }
+
+        } catch (Exception e) {
+            Log.e("BluetoothUtil", "Error loading vendor data: ", e);
+        }
+    }
+    private static String getManufacturerFromMacAddress(BluetoothDevice device) {
+        String macAddress = device.getAddress();
+        if (macAddress != null && macAddress.length() >= 17) {
+            // Extract the MAC prefix (first 3 bytes)
+            String macPrefix = macAddress.substring(0, 8).toUpperCase().replace(":", "");
+            // Search for the vendor in the list of vendor data
+            if (manufacturerData.containsKey(macPrefix)) {
+                return manufacturerData.get(macPrefix);  // Return manufacturer name
+            }
+        }
+        return "Unknown Manufacturer";
+    }
+
+    private String identifyDeviceType(BluetoothDevice device) {
+        String deviceType = "Unknown";
+
+        // 1. First, use BluetoothClass to get the major device class
+        BluetoothClass bluetoothClass = device.getBluetoothClass();
+        if (bluetoothClass != null) {
+            int majorDeviceClass = bluetoothClass.getMajorDeviceClass();
+
+            // Check device type based on its major device class
+            switch (majorDeviceClass) {
+                case BluetoothClass.Device.Major.AUDIO_VIDEO:
+                    deviceType = "Audio Device";// (Headset, Speaker, etc.)
+                    break;
+                case BluetoothClass.Device.Major.PHONE:
+                    deviceType = "Phone";
+                    break;
+                case BluetoothClass.Device.Major.COMPUTER:
+                    deviceType = "Computer";
+                    break;
+                case BluetoothClass.Device.Major.HEALTH:
+                    deviceType = "Health Device";
+                    break;
+                case BluetoothClass.Device.Major.MISC:
+                    deviceType = "MISC";
+                    break;
+                case BluetoothClass.Device.Major.NETWORKING:
+                    deviceType = "NETWORKING";
+                    break;
+                case BluetoothClass.Device.Major.TOY:
+                    deviceType = "TOY";
+                    break;
+                case BluetoothClass.Device.Major.IMAGING:
+                    deviceType = "Imaging Device";// (Printer, Camera, etc.)
+                    break;
+                case BluetoothClass.Device.Major.PERIPHERAL:
+                    deviceType = "Peripheral Device";// (Keyboard, Mouse, etc.)
+                    break;
+                case BluetoothClass.Device.Major.UNCATEGORIZED:
+                    deviceType = "UNCATEGORIZED";
+                    break;
+                case BluetoothClass.Device.Major.WEARABLE:
+                    deviceType = "Wearable Device";
+                    break;
+                default:
+                    deviceType = "Unknown";
+                    break;
+            }
+        }
+
+        // 2. If the device is still "Unknown", try to identify using UUIDs
+        if (deviceType.equals("Unknown")) {
+            // Get the UUIDs advertised by the device
+            ParcelUuid[] uuids = device.getUuids();
+            if (uuids != null) {
+                for (ParcelUuid uuid : uuids) {
+                    String uuidString = uuid.toString();
+
+                    // Check for specific UUIDs that correspond to common Bluetooth device types
+                    if (uuidString.equalsIgnoreCase("0000110B-0000-1000-8000-00805F9B34FB")) {
+                        // A2DP (Advanced Audio Distribution Profile) - Audio (Headset, Speaker, etc.)
+                        deviceType = "Audio Device";// (Headset, Speaker, etc.)
+                        break;
+                    } else if (uuidString.equalsIgnoreCase("0000111E-0000-1000-8000-00805F9B34FB")) {
+                        // HFP (Hands-Free Profile) - Audio (Headset, Car Hands-Free, etc.)
+                        deviceType = "Audio Device";// (Hands-Free)
+                        break;
+                    } else if (uuidString.equalsIgnoreCase("0000180F-0000-1000-8000-00805F9B34FB")) {
+                        // Battery Service - Often found in many devices (not specific to one type)
+                        deviceType = "Battery Powered Device";
+                        break;
+                    } else if (uuidString.equalsIgnoreCase("00001812-0000-1000-8000-00805F9B34FB")) {
+                        // Printer Service (0x181F) - Printer
+                        deviceType = "Imaging Device";//Printer
+                        break;
+                    } else if (uuidString.equalsIgnoreCase("00001800-0000-1000-8000-00805F9B34FB")) {
+                        // Generic Access Profile (GAP) - Used by Android Devices and other general Bluetooth devices
+                        deviceType = "Generic Device";
+                    } else if (uuidString.equalsIgnoreCase("00001124-0000-1000-8000-00805F9B34FB")) {
+                        // HID (Human Interface Device) - Android Devices, Keyboards, Mice, etc.
+                        deviceType = "Phone";
+                    }
+                }
+            }
+        }
+
+        // 3. If still unknown, fallback to checking the device name
+        if (deviceType.equals("Unknown") && device.getName() != null) {
+            String deviceName = device.getName().toLowerCase();
+
+            // Check device name patterns for specific device types
+            if (deviceName.contains("printer")) {
+                deviceType = "Imaging Device";
+            } else if (deviceName.contains("headset") || deviceName.contains("audio")) {
+                deviceType = "Audio Device";// (Headset/Speaker)
+            } else if (deviceName.contains("pixel") || deviceName.contains("galaxy")) {
+                deviceType = "Android Device";
+            } else if (deviceName.contains("keyboard") || deviceName.contains("mouse")) {
+                deviceType = "Peripheral Device";// (Keyboard/Mouse)
+            }
+        }
+
+        return deviceType;
+    }
+
 
     @ReactMethod
     public void connect(String address, final Promise promise) {
@@ -252,22 +444,19 @@ public class RNBluetoothManagerModule extends ReactContextBaseJavaModule
         } else {
             promise.reject("BT NOT ENABLED: on disconnect");
         }
-
 	}
 
     @ReactMethod
-    public void unpaire(String address,final Promise promise){
+    public void unpair(String address, final Promise promise){
         BluetoothAdapter adapter = this.getBluetoothAdapter();
         if (adapter!=null && adapter.isEnabled()) {
             BluetoothDevice device = adapter.getRemoteDevice(address);
             this.unpairDevice(device);
             promise.resolve(address);
         } else {
-            promise.reject("BT NOT ENABLED: on unpaire");
+            promise.reject("BT NOT ENABLED: on unpair");
         }
-
     }
-
 
     /*
     // Constants that indicate the current connection state
@@ -314,12 +503,9 @@ public class RNBluetoothManagerModule extends ReactContextBaseJavaModule
 
     }
 
-
-
-        private void unpairDevice(BluetoothDevice device) {
+    private void unpairDevice(BluetoothDevice device) {
         try {
-            Method m = device.getClass()
-                    .getMethod("removeBond", (Class[]) null);
+            Method m = device.getClass().getMethod("removeBond", (Class[]) null);
             m.invoke(device, (Object[]) null);
         } catch (Exception e) {
             Log.e(TAG, e.getMessage());
@@ -380,6 +566,8 @@ public class RNBluetoothManagerModule extends ReactContextBaseJavaModule
                         JSONObject obj = new JSONObject();
                         obj.put("name", d.getName());
                         obj.put("address", d.getAddress());
+                        obj.put("type", identifyDeviceType(d));
+                        obj.put("manufacturer", getManufacturerFromMacAddress(d));
                         pairedDevices.pushString(obj.toString());
                     } catch (JSONException e) {
                         Log.e(TAG, "Error creating JSON object for paired device", e);
@@ -443,6 +631,8 @@ public class RNBluetoothManagerModule extends ReactContextBaseJavaModule
                     try {
                         deviceFound.put("name", device.getName());
                         deviceFound.put("address", device.getAddress());
+                        deviceFound.put("type", identifyDeviceType(device));
+                        deviceFound.put("manufacturer", getManufacturerFromMacAddress(device));
                     } catch (Exception e) {
                         //ignore
                     }
