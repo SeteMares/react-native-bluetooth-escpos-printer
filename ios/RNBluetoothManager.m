@@ -391,15 +391,15 @@ RCT_EXPORT_METHOD(disconnect:(NSString *)address
  */
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverServices:(nullable NSError *)error{
     if (error){
-        NSLog(@"扫描外设服务出错：%@-> %@", peripheral.name, [error localizedDescription]);
+        NSLog(@"Error in scanning peripheral service：%@-> %@", peripheral.name, [error localizedDescription]);
         return;
     }
-    NSLog(@"扫描到外设服务：%@ -> %@",peripheral.name,peripheral.services);
+    NSLog(@"Scan Peripheral Services：%@ -> %@",peripheral.name,peripheral.services);
     for (CBService *service in peripheral.services) {
         [peripheral discoverCharacteristics:nil forService:service];
          NSLog(@"服务id：%@",service.UUID.UUIDString);
     }
-    NSLog(@"开始扫描外设服务的特征 %@...",peripheral.name);
+    NSLog(@"Starting to scan the characteristics of peripheral services %@...",peripheral.name);
 
     if(error && self.connectRejectBlock){
         RCTPromiseRejectBlock rjBlock = self.connectRejectBlock;
