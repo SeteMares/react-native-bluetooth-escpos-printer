@@ -169,7 +169,7 @@ declare module '@cococart/react-native-bluetooth-escpos-printer' {
          */
         function getConnectedDeviceAddress(): Promise<void>
 
-        function unpaire(address: string): Promise<string>
+        function unpair(address: string): Promise<string>
 
         function scanDevices(): Promise<string> // '{found:[],paired:[]}'
 

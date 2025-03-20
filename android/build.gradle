@@ -1,58 +1,41 @@
 buildscript {
     repositories {
-        maven {url "https://repo.spring.io/plugins-release/"}
+        google() // Includes Google's Maven repository
         mavenCentral()
-        maven {
-            // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
-            url "$rootDir/../node_modules/react-native/android"
-        }
-        maven {
-            url 'https://maven.google.com'
-        }
+        maven { url "$rootDir/../node_modules/react-native/android" }
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:3.1.4'
+        classpath 'com.android.tools.build:gradle:4.0.0' // Keep this version or adjust as needed based on compatibility
     }
 }
 
 apply plugin: 'com.android.library'
 
 android {
-    compileSdkVersion 34
-    buildToolsVersion "34.0.0"
+    compileSdkVersion 31 // Updated to API level 31 to support android:attr/lStar
 
     defaultConfig {
         minSdkVersion 16
-        targetSdkVersion 24
+        targetSdkVersion 31 // Ensure your app targets API level 31 or your preferred level
         versionCode 1
         versionName "1.0"
     }
     lintOptions {
         abortOnError false
     }
-    sourceSets {
-        main {
-            aidl.srcDirs = ['src/main/java']
-        }
-    }
 }
 
 repositories {
-    maven {url "https://repo.spring.io/plugins-release/"}
+    google()
     mavenCentral()
-    maven {
-        // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
-        url "$rootDir/../node_modules/react-native/android"
-    }
-    maven {
-        url 'https://maven.google.com'
-    }
+    maven { url "$rootDir/../node_modules/react-native/android" }
 }
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation 'com.facebook.react:react-native:+'  // From node_modules
-    implementation group: 'com.android.support', name: 'support-v4', version: '27.0.0'
+    implementation 'com.facebook.react:react-native:+'  // From node_modules, consider specifying a fixed version for stability
+    implementation 'androidx.core:core-ktx:1.6.0' // Ensuring use of AndroidX
     implementation "com.google.zxing:core:3.3.0"
+    // Make sure all your dependencies are compatible with the compileSdkVersion
 }

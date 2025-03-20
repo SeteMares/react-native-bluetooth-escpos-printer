@@ -68,7 +68,7 @@ RCTPromiseRejectBlock pendingReject;
 RCT_EXPORT_MODULE(BluetoothEscposPrinter);
 
 /**
- * Sets the current deivce width
+ * Sets the current device width
  **/
 RCT_EXPORT_METHOD(setWidth:(int) width)
 {
