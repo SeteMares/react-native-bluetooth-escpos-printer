@@ -13,11 +13,11 @@ buildscript {
 apply plugin: 'com.android.library'
 
 android {
-    compileSdkVersion 31 // Updated to API level 31 to support android:attr/lStar
+    compileSdkVersion 34
 
     defaultConfig {
         minSdkVersion 16
-        targetSdkVersion 31 // Ensure your app targets API level 31 or your preferred level
+        targetSdkVersion 34
         versionCode 1
         versionName "1.0"
     }
