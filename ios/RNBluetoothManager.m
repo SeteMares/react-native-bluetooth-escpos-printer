@@ -182,36 +182,42 @@ RCT_EXPORT_METHOD(connect:(NSString *)address
                   findEventsWithResolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
-    NSLog(@"Trying to connect....%@",address);
+    NSLog(@"Trying to connect....%@", address);
     [self callStop];
+
+    // Check if Bluetooth is powered on
+    if (self.centralManager.state != CBManagerStatePoweredOn) {
+        NSError *error = [NSError errorWithDomain:@"com.bluetooth.error"
+                                             code:1
+                                         userInfo:@{NSLocalizedDescriptionKey: @"Bluetooth is not powered on"}];
+        reject(@"BLUETOOTH_NOT_POWERED_ON", @"Bluetooth is not powered on", error);
+        return;
+    }
+
+    // First check if we're already connected to this device
     if(connected){
-        NSString *connectedAddress =connected.identifier.UUIDString;
+        NSLog(@"Already connected to %@", connected);
+        NSString *connectedAddress = connected.identifier.UUIDString;
         if([address isEqualToString:connectedAddress]){
             resolve(nil);
             return;
-        }else{
+        } else {
             [self.centralManager cancelPeripheralConnection:connected];
-            //Callbacks:
-            //entralManager:didDisconnectPeripheral:error:
         }
     }
     CBPeripheral *peripheral = [self.foundDevices objectForKey:address];
     self.connectResolveBlock = resolve;
     self.connectRejectBlock = reject;
+
     if(peripheral){
-          _waitingConnect = address;
-          NSLog(@"Trying to connectPeripheral....%@",address);
-        [self.centralManager connectPeripheral:peripheral options:nil];
-        // Callbacks:
-        //    centralManager:didConnectPeripheral:
-        //    centralManager:didFailToConnectPeripheral:error:
-    }else{
-          //starts the scan.
         _waitingConnect = address;
-         NSLog(@"Scan to find ....%@",address);
+        NSLog(@"Trying to connectPeripheral....%@", address);
+        [self.centralManager connectPeripheral:peripheral options:nil];
+    } else {
+        // If the device wasn't found in either location, start scanning for it
+        _waitingConnect = address;
+        NSLog(@"Scan to find ....%@", address);
         [self.centralManager scanForPeripheralsWithServices:nil options:@{CBCentralManagerScanOptionAllowDuplicatesKey:@NO}];
-        //Callbacks:
-        //centralManager:didDiscoverPeripheral:advertisementData:RSSI:
     }
 }
 
@@ -270,7 +276,12 @@ RCT_EXPORT_METHOD(disconnect:(NSString *)address
     if(!supportServices){
         CBUUID *issc = [CBUUID UUIDWithString: @"49535343-FE7D-4AE5-8FA9-9FAFD205E455"];
         supportServices = [NSArray arrayWithObject:issc];/*ISSC*/
-        writeableCharactiscs = @{issc:@"49535343-8841-43F4-A8D4-ECBE34729BB3"};
+        // Create dictionary with both service UUIDs and their writable characteristics
+        writeableCharactiscs = @{
+            issc: @"49535343-8841-43F4-A8D4-ECBE34729BB3",
+            [CBUUID UUIDWithString:@"E7810A71-73AE-499D-8C15-FAA9AEF0C3F2"]: @"BEF8D6C9-9C21-4C9E-B632-BD58C1009F9F"
+        };
+        supportServices = [supportServices arrayByAddingObject:[CBUUID UUIDWithString:@"E7810A71-73AE-499D-8C15-FAA9AEF0C3F2"]];
     }
 }
 
@@ -300,9 +311,25 @@ RCT_EXPORT_METHOD(disconnect:(NSString *)address
 /**
  * CBCentralManagerDelegate
  **/
-- (void)centralManagerDidUpdateState:(CBCentralManager *)central{
-    NSLog(@"%ld",(long)central.state);
-}
+ - (void)centralManagerDidUpdateState:(CBCentralManager *)central {
+     NSLog(@"Bluetooth state changed: %ld", (long)central.state);
+
+     // If we're waiting to connect but Bluetooth wasn't ready before
+     if (central.state == CBManagerStatePoweredOn && _waitingConnect) {
+         NSString *addressToConnect = _waitingConnect;
+         // Clear the waiting flag to avoid loops
+         _waitingConnect = nil;
+
+         // Re-attempt the connection
+         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+             if (self.connectResolveBlock && self.connectRejectBlock) {
+                 [self connect:addressToConnect
+                      findEventsWithResolver:self.connectResolveBlock
+                      rejecter:self.connectRejectBlock];
+             }
+         });
+     }
+ }
 
 - (void)centralManager:(CBCentralManager *)central didDiscoverPeripheral:(CBPeripheral *)peripheral advertisementData:(NSDictionary<NSString *, id> *)advertisementData RSSI:(NSNumber *)RSSI{
     NSLog(@"did discover peripheral: %@",peripheral);
