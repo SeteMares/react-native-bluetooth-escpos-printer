@@ -49,6 +49,7 @@ public class RNBluetoothManagerModule extends ReactContextBaseJavaModule
     public static final String EVENT_UNABLE_CONNECT = "EVENT_UNABLE_CONNECT";
     public static final String EVENT_CONNECTED = "EVENT_CONNECTED";
     public static final String EVENT_BLUETOOTH_NOT_SUPPORT = "EVENT_BLUETOOTH_NOT_SUPPORT";
+    public static final String EVENT_BLUETOOTH_NO_PERMISSION = "EVENT_BLUETOOTH_NO_PERMISSION";
 
     // Intent request codes
     private static final int REQUEST_CONNECT_DEVICE = 1;
@@ -141,36 +142,93 @@ public class RNBluetoothManagerModule extends ReactContextBaseJavaModule
         return mBluetoothAdapter;
     }
 
+    private boolean checkBluetoothPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // For Android 12+ (API level 31 and above), check for Bluetooth permissions
+            int permissionCheckedScan = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.BLUETOOTH_SCAN);
+            int permissionCheckedConnect = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.BLUETOOTH_CONNECT);
+
+            return permissionCheckedScan == PackageManager.PERMISSION_GRANTED &&
+                    permissionCheckedConnect == PackageManager.PERMISSION_GRANTED;
+        } else {
+            // For Android versions below 12, only need ACCESS_FINE_LOCATION permission
+            int permissionCheckedLocation = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.ACCESS_FINE_LOCATION);
+
+            return permissionCheckedLocation == PackageManager.PERMISSION_GRANTED;
+        }
+    }
+
+    private void requestBluetoothPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // For Android 12+ (API level 31 and above), check for Bluetooth permissions
+            int permissionCheckedScan = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.BLUETOOTH_SCAN);
+            int permissionCheckedConnect = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.BLUETOOTH_CONNECT);
+
+            if (permissionCheckedScan == PackageManager.PERMISSION_DENIED ||
+                permissionCheckedConnect == PackageManager.PERMISSION_DENIED) {
+
+                // Request necessary permissions
+                ActivityCompat.requestPermissions(reactContext.getCurrentActivity(),
+                        new String[]{
+                                android.Manifest.permission.BLUETOOTH_SCAN,
+                                android.Manifest.permission.BLUETOOTH_CONNECT
+                        }, 1);
+            }
+        } else {
+            // For Android versions below 12, only need ACCESS_FINE_LOCATION permission
+            int permissionCheckedLocation = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.ACCESS_FINE_LOCATION);
+
+            if (permissionCheckedLocation == PackageManager.PERMISSION_DENIED) {
+                // Request location permission
+                ActivityCompat.requestPermissions(reactContext.getCurrentActivity(),
+                        new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, 1);
+            }
+        }
+    }
+
 
     @ReactMethod
     public void enableBluetooth(final Promise promise) {
         BluetoothAdapter adapter = this.getBluetoothAdapter();
-        if(adapter == null){
+        if (adapter == null){
             promise.reject(EVENT_BLUETOOTH_NOT_SUPPORT);
-        }else if (!adapter.isEnabled()) {
+        }
+        if (!adapter.isEnabled()) {
             // If Bluetooth is not on, request that it be enabled.
-            // setupChat() will then be called during onActivityResult
             Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             promiseMap.put(PROMISE_ENABLE_BT, promise);
             this.reactContext.startActivityForResult(enableIntent, REQUEST_ENABLE_BT, Bundle.EMPTY);
-        } else {
-            WritableArray pairedDevice =Arguments.createArray();
-            Set<BluetoothDevice> boundDevices = adapter.getBondedDevices();
-            for (BluetoothDevice d : boundDevices) {
-                try {
-                    JSONObject obj = new JSONObject();
-                    obj.put("name", d.getName());
-                    obj.put("address", d.getAddress());
-                    obj.put("type", identifyDeviceType(d));
-                    obj.put("manufacturer", getManufacturerFromMacAddress(d));
-                    pairedDevice.pushString(obj.toString());
-                } catch (Exception e) {
-                    Log.e(TAG, "Error creating JSON object for paired device", e);
-                }
-            }
-            Log.d(TAG, "Bluetooth Enabled");
-            promise.resolve(pairedDevice);
+            promise.resolve(null);
         }
+        Log.d(TAG, "D: Enabling Bluetooth, SDK: " + Build.VERSION.SDK_INT);
+
+        if (!checkBluetoothPermissions()) {
+            requestBluetoothPermissions();
+        }
+
+        // Check if required Bluetooth permissions are granted
+        if (!checkBluetoothPermissions()) {
+            Log.d(TAG, "D: Bluetooth permissions denied");
+            promise.reject(EVENT_BLUETOOTH_NO_PERMISSION);
+            return;
+        }
+
+        WritableArray pairedDevice =Arguments.createArray();
+        Set<BluetoothDevice> boundDevices = adapter.getBondedDevices();
+        for (BluetoothDevice d : boundDevices) {
+            try {
+                JSONObject obj = new JSONObject();
+                obj.put("name", d.getName());
+                obj.put("address", d.getAddress());
+                obj.put("type", identifyDeviceType(d));
+                obj.put("manufacturer", getManufacturerFromMacAddress(d));
+                pairedDevice.pushString(obj.toString());
+            } catch (Exception e) {
+                Log.e(TAG, "Error creating JSON object for paired device", e);
+            }
+        }
+        Log.d(TAG, "Bluetooth Enabled");
+        promise.resolve(pairedDevice);
     }
 
     @ReactMethod
@@ -191,8 +249,8 @@ public class RNBluetoothManagerModule extends ReactContextBaseJavaModule
         BluetoothAdapter adapter = this.getBluetoothAdapter();
         if (adapter != null) {
             boolean isEnabled = adapter.isEnabled();
-            Log.d(TAG, "D: Bluetooth adapter value: " + adapter);
-            Log.d(TAG, "D: Bluetooth enabled status: " + isEnabled);
+            Log.d(TAG, "D: Bluetooth adapter: " + adapter);
+            Log.d(TAG, "D: Bluetooth enabled: " + isEnabled);
             promise.resolve(isEnabled);
         } else {
             Log.d(TAG, "D: Bluetooth adapter is null");
@@ -209,34 +267,9 @@ public class RNBluetoothManagerModule extends ReactContextBaseJavaModule
             promise.reject(EVENT_BLUETOOTH_NOT_SUPPORT, "Bluetooth not supported");
         } else {
             cancelDiscovery();
-            // Check Android version
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                // For Android 12+ (API level 31 and above), check for Bluetooth permissions
-                int permissionCheckedScan = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.BLUETOOTH_SCAN);
-                int permissionCheckedConnect = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.BLUETOOTH_CONNECT);
-                int permissionCheckedLocation = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.ACCESS_FINE_LOCATION);
 
-                if (permissionCheckedScan == PackageManager.PERMISSION_DENIED ||
-                    permissionCheckedConnect == PackageManager.PERMISSION_DENIED ||
-                    permissionCheckedLocation == PackageManager.PERMISSION_DENIED) {
-
-                    // Request necessary permissions
-                    ActivityCompat.requestPermissions(reactContext.getCurrentActivity(),
-                            new String[]{
-                                    android.Manifest.permission.BLUETOOTH_SCAN,
-                                    android.Manifest.permission.BLUETOOTH_CONNECT,
-                                    android.Manifest.permission.ACCESS_FINE_LOCATION
-                            }, 1);
-                }
-            } else {
-                // For Android versions below 12, only need ACCESS_FINE_LOCATION permission
-                int permissionCheckedLocation = ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.ACCESS_FINE_LOCATION);
-
-                if (permissionCheckedLocation == PackageManager.PERMISSION_DENIED) {
-                    // Request location permission
-                    ActivityCompat.requestPermissions(reactContext.getCurrentActivity(),
-                            new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, 1);
-                }
+            if (!checkBluetoothPermissions()) {
+                requestBluetoothPermissions();
             }
 
             pairedDevice = new JSONArray();
